@@ -11,6 +11,6 @@ RUN apt-get update && apt-get install -y curl nano psmisc zip git && apt-get --f
 
 RUN git clone https://gitee.com/gitee_fu/easy-tools.git
 
-RUN bash easy-tools/setup_and_run.sh
+# RUN bash easy-tools/setup_and_run.sh
 
-COPY ./fonts/* /opt/conda/lib/python3.10/site-packages/matplotlib/mpl-data/fonts/ttf/
+# COPY ./fonts/* /opt/conda/lib/python3.10/site-packages/matplotlib/mpl-data/fonts/ttf/
