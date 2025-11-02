@@ -7,7 +7,7 @@ FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 # RUN pip install --upgrade pip && python -m pip install --upgrade setuptools && \
 #     pip install opencv-python tb-nightly matplotlib logger_tt tabulate tqdm wheel mccabe scipy
 
-RUN apt-get update && apt-get install -y curl nano psmisc zip git && apt-get --fix-broken install -y && cd ~
+RUN apt-get update && apt-get install -y curl nano psmisc zip git aria2 axel && apt-get --fix-broken install -y && cd ~
 
 RUN git clone https://gitee.com/gitee_fu/easy-tools.git
 
