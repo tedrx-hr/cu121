@@ -43,16 +43,16 @@ ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
 ENV MINIFORGE_PATH=/root/miniforge
 ENV PATH="${MINIFORGE_PATH}/bin:${PATH}"
 
+# 【【【 这是修改的地方 】】】
 RUN wget -O Miniforge3.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh" && \
     bash Miniforge3.sh -b -p ${MINIFORGE_PATH} && \
     rm Miniforge3.sh && \
-    mamba init bash
+    # 使用 conda init 进行初始化，它在脚本环境中更稳定
+    conda init bash
 
 # ----------------- 5. 安装 uv 包管理工具 -----------------
-# 设置uv的安装目录并将其添加到PATH环境变量
 ENV UV_HOME="/root/.local"
 ENV PATH="${UV_HOME}/bin:${PATH}"
-# 使用官方推荐的脚本进行安装
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # ----------------- 6. 配置软件源和Git -----------------
