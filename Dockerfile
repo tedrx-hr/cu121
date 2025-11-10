@@ -1,31 +1,104 @@
+# 基础镜像：选择与学校节点驱动兼容的CUDA 12.1和Ubuntu 22.04
 FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
-# RUN echo 'Acquire::http::Proxy "http://172.17.171.249:8888";' > /etc/apt/apt.conf.d/proxy.conf && \
-#     echo 'Acquire::https::Proxy "http://172.17.171.249:8888";' >> /etc/apt/apt.conf.d/proxy.conf
+# 设置环境变量，避免apt-get等工具在构建时出现交互式提示
+ENV DEBIAN_FRONTEND=noninteractive
 
-# RUN apt-get update && apt-get install -y libgl1-mesa-glx libpci-dev curl nano psmisc zip git && apt-get --fix-broken install -y
-
-# RUN conda install -y scikit-learn pandas flake8 yapf isort yacs future libgcc
-
-# RUN pip install --upgrade pip && python -m pip install --upgrade setuptools && \
-#     pip install opencv-python tb-nightly matplotlib logger_tt tabulate tqdm wheel mccabe scipy
-
+# 设置默认工作目录
 WORKDIR /root
 
-RUN apt-get update && apt-get install -y curl nano psmisc zip git aria2 axel && apt-get --fix-broken install -y \
+# ----------------- 1. 安装系统依赖 -----------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    nano \
+    psmisc \
+    zip \
+    git \
+    aria2 \
+    axel \
+    wget \
+    file \
+    software-properties-common \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-RUN cd /root
+# ----------------- 2. 安装额外的 CUDA Toolkit 11.8 -----------------
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+    dpkg -i cuda-keyring_1.1-1_all.deb && \
+    rm cuda-keyring_1.1-1_all.deb && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends cuda-toolkit-11-8 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# ----------------- 3. 配置默认CUDA环境 (12.1) -----------------
+RUN rm -f /usr/local/cuda && \
+    ln -s /usr/local/cuda-12.1 /usr/local/cuda
+
+# 使用ENV指令设置默认的环境变量，指向12.1
+ENV PATH="/usr/local/cuda/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+
+# ----------------- 4. 安装并配置Miniforge (Mamba) -----------------
+ENV MINIFORGE_PATH=/root/miniforge
+ENV PATH="${MINIFORGE_PATH}/bin:${PATH}"
+
+RUN wget -O Miniforge3.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh" && \
+    bash Miniforge3.sh -b -p ${MINIFORGE_PATH} && \
+    rm Miniforge3.sh && \
+    mamba init bash
+
+# ----------------- 5. 安装 uv 包管理工具 -----------------
+# 设置uv的安装目录并将其添加到PATH环境变量
+ENV UV_HOME="/root/.local"
+ENV PATH="${UV_HOME}/bin:${PATH}"
+# 使用官方推荐的脚本进行安装
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# ----------------- 6. 配置软件源和Git -----------------
+RUN pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple && \
+    git config --global user.name 'linkslinks' && \
+    git config --global user.email 'fyj2003116@qq.com'
+
+# ----------------- 7. 克隆项目代码 -----------------
 RUN git clone https://gitee.com/gitee_fu/easy-tools.git
 
-# RUN bash easy-tools/setup_and_run.sh
+# ----------------- 8. 创建CUDA版本切换工具 -----------------
+RUN <<'EOF' tee -a /root/.bashrc > /dev/null
 
-# COPY ./fonts/* /opt/conda/lib/python3.10/site-packages/matplotlib/mpl-data/fonts/ttf/
+# Function to switch between installed CUDA versions
+use_cuda() {
+    if [ -z "$1" ]; then
+        echo "Usage: use_cuda <version>"
+        echo "Available versions:"
+        ls -d /usr/local/cuda-* | sed 's/.*cuda-//' | sort -V
+        return 1
+    fi
 
-# --- 在这里设置全局环境变量 ---
-ENV http_proxy="http://172.17.171.249:8888"
-ENV https_proxy="http://172.17.171.249:8888"
-ENV no_proxy="localhost,127.0.0.1,harbor.fzu.edu.cn,.fzu.edu.cn,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"
-# -----------------------------
+    local CUDAPATH="/usr/local/cuda-$1"
+    if [ ! -d "${CUDAPATH}" ]; then
+        echo "Error: CUDA version $1 not found at ${CUDAPATH}"
+        return 1
+    fi
+
+    echo "Switching to CUDA $1..."
+
+    # Update the symlink
+    rm -f /usr/local/cuda
+    ln -s "${CUDAPATH}" /usr/local/cuda
+
+    # Update environment variables for the current shell session
+    export PATH=$(echo $PATH | tr ':' '\n' | grep -v '/usr/local/cuda' | paste -sd:)
+    export LD_LIBRARY_PATH=$(echo $LD_LIBRARY_PATH | tr ':' '\n' | grep -v '/usr/local/cuda' | paste -sd:)
+    export PATH="${CUDAPATH}/bin:${PATH}"
+    export LD_LIBRARY_PATH="${CUDAPATH}/lib64:${LD_LIBRARY_PATH}"
+
+    echo "Successfully switched to CUDA $1."
+    echo -n "nvcc version: "
+    nvcc -V
+}
+EOF
+
+# ----------------- 9. 设置容器启动时的默认命令 -----------------
+# 默认进入bash，以便用户可以交互式操作
+CMD ["bash"]
